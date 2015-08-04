@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 
 connections = []
 
@@ -9,14 +10,19 @@ def handle_connection(reader, writer):
     connections.append(writer)
     print('%s connected!' % str(peername))
     while True:
-        data = yield from asyncio.wait_for(reader.readline(), timeout=120)
-        if data:
-            for connection_writer in connections:
-                if writer != connection_writer:
-                    connection_writer.write(data)
-        else:
-            print('%s lost connection' % str(peername))
-            connections.remove(peername)
+        try:
+            data = yield from asyncio.wait_for(reader.readline(), timeout=240)
+            if data:
+                for connection_writer in connections:
+                    if writer != connection_writer:
+                        connection_writer.write(str.encode(str(connection_writer.get_extra_info('peername')) + ': '))
+                        connection_writer.write(data)
+            else:
+                print('%s lost connection' % str(peername))
+                connections.remove(peername)
+                break
+        except concurrent.futures.TimeoutError:
+            print('%s lost connection by timeout' % str(peername))
             break
     writer.close()
 
@@ -29,7 +35,7 @@ def main():
     try:
         loop.run_forever()
     except KeyboardInterrupt:
-        pass
+        print('\nServer stopped')
     finally:
         server.close()
         loop.close()
