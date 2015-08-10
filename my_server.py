@@ -21,18 +21,23 @@ class User:
                 if user.password == self.password:
                     if user.status == Status.inactive:
                         user.status = Status.active
-                        return {True: 'User %s is online' % user.name}
+                        return {True: 'User %s is online\r\n' % user.name}
                     else:
-                        return {False: 'This user already online'}
+                        return {False: 'This user already online\r\n'}
                 else:
-                    return {False: 'Invalid password'}
+                    return {False: 'Invalid password\r\n'}
         users_list.append(self)
-        return {True: 'New user %s added' % self.name}
+        return {True: 'New user %s added\r\n' % self.name}
 
 
 class Handler:
     def __init__(self):
         self.users = []
+
+    def change_status_to_inactive(self, inactive_user):
+        for user in self.users:
+            if user.name == inactive_user.name:
+                user.status = Status.inactive
 
     @asyncio.coroutine
     def __call__(self, reader, writer):
@@ -60,9 +65,11 @@ class Handler:
                             user.connection.write(data)
                 else:
                     print('%s lost connection' % str(current_user.name))
+                    self.change_status_to_inactive(current_user)
                     break
             except concurrent.futures.TimeoutError:
                 print('%s lost connection by timeout' % str(current_user.name))
+                self.change_status_to_inactive(current_user)
                 break
         writer.close()
 
