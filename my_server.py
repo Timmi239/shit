@@ -52,6 +52,7 @@ class Handler:
         writer.write(str.encode(result[list(result.keys())[0]]))
         if not list(result.keys())[0]:
             writer.close()
+            return
 
 
         print('%s connected!' % current_user.name)
