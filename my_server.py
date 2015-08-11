@@ -51,16 +51,16 @@ class Handler:
     @asyncio.coroutine
     def __call__(self, reader, writer):
 
-        writer.write(str.encode('Login: '))
-        login = yield from reader.readline()
-        writer.write(str.encode('Pwd: '))
-        password = yield from reader.readline()
+        ChatServer.send_message(writer, 'Login: ')
+        login = yield from ChatServer.read_message(reader)
+        ChatServer.send_message(writer, 'Pwd: ')
+        password = yield from ChatServer.read_message(reader)
         current_user = User(login, password, writer)
 
         if current_user not in self.users:
             ChatServer.send_message(current_user.connection, 'Welcome to chat!')
             self.users.append(current_user)
-            print(current_user.name + 'connected')
+            print(current_user.name + ' connected')
 
         else:
             if not self.check_user_existence(current_user):
@@ -77,7 +77,7 @@ class Handler:
 
         while True:
             try:
-                data = yield from asyncio.wait_for(reader.readline(), timeout=240)
+                data = yield from asyncio.wait_for(ChatServer.read_message(reader), timeout=240)
                 if data:
                     self.send_message_to_all(current_user, data.decode('utf-8')[:-2])
                 else:
@@ -108,10 +108,10 @@ class ChatServer():
     def send_message(cls, writer, message):
         writer.write(str.encode(message + '\r\n'))
 
-
-def main():
-    ChatServer()
+    @classmethod
+    def read_message(cls, reader):
+        return reader.readline()
 
 
 if __name__ == '__main__':
-    main()
+    ChatServer()
