@@ -57,23 +57,8 @@ class Handler:
         password = yield from ChatServer.read_message(reader)
         current_user = User(login, password, writer)
 
-        if current_user not in self.users:
-            ChatServer.send_message(current_user.connection, 'Welcome to chat!')
-            self.users.append(current_user)
-            print(current_user.name + ' connected')
-
-        else:
-            if not self.check_user_existence(current_user):
-                ChatServer.send_message(current_user.connection, 'Incorrect password')
-                current_user.connection.close()
-                return
-
-            if not self.check_user_inactivity(current_user):
-                ChatServer.send_message(current_user.connection, 'User %s is online now' % current_user.name)
-                current_user.connection.close()
-                return
-
-            self.change_user_status(current_user, Status.active, 'User %s is online again' % current_user.name)
+        if not self.enter_to_chat(current_user):
+            return
 
         while True:
             try:
@@ -87,6 +72,26 @@ class Handler:
                 self.change_user_status(current_user, Status.inactive, 'lost connection by timeout')
                 break
         writer.close()
+
+    def enter_to_chat(self, new_user):
+        if new_user not in self.users:
+            ChatServer.send_message(new_user.connection, 'Welcome to chat!')
+            self.users.append(new_user)
+            print(new_user.name + ' connected')
+
+        else:
+            if not self.check_user_existence(new_user):
+                ChatServer.send_message(new_user.connection, 'Incorrect password')
+                new_user.connection.close()
+                return False
+
+            if not self.check_user_inactivity(new_user):
+                ChatServer.send_message(new_user.connection, 'User %s is online now' % new_user.name)
+                new_user.connection.close()
+                return False
+
+            self.change_user_status(new_user, Status.active, 'User %s is online again' % new_user.name)
+        return True
 
 
 class ChatServer():
