@@ -9,95 +9,101 @@ class Status(Enum):
 
 
 class User:
-    def __init__(self, name, password, connection, status=Status.active):
-        self.name = name[:-2].decode('utf-8')
-        self.password = password
+    def __init__(self, writer, reader, status=Status.active):
         self.status = status
-        self.connection = connection
+        self.writer = writer
+        self.reader = reader
 
     def __eq__(self, other_user):
         if self.name == other_user.name:
             return True
         return False
 
+    def change_status(self, status):
+        self.status = status
 
-class Handler:
+
+class UserHandler:
     def __init__(self):
-        self.users = []
-
-    def change_user_status(self, inactive_user, status, reason):
-        for user in self.users:
-            if user.name == inactive_user.name:
-                print(reason)
-                user.status = status
-
-    def send_message_to_all(self, current_user, message):
-        for user in self.users:
-            if current_user.connection != user.connection:
-                ChatServer.send_message(user.connection, current_user.name + ': ' + message)
-
-    def check_user_existence(self, new_user):
-        for user in self.users:
-            if user.name == new_user.name and user.password == new_user.password:
-                return True
-        return False
-
-    def check_user_inactivity(self, new_user):
-        for user in self.users:
-            if user.name == new_user.name and user.status == Status.inactive:
-                return True
-        return False
+        self.users = {}
+        self.transport = Transport(self)
 
     @asyncio.coroutine
     def __call__(self, reader, writer):
+        user = User(writer, reader)
+        yield from self.login(user)
 
-        ChatServer.send_message(writer, 'Login: ')
-        login = yield from ChatServer.read_message(reader)
-        ChatServer.send_message(writer, 'Pwd: ')
-        password = yield from ChatServer.read_message(reader)
-        current_user = User(login, password, writer)
-
-        if not self.enter_to_chat(current_user):
-            return
-
-        while True:
-            try:
-                data = yield from asyncio.wait_for(ChatServer.read_message(reader), timeout=240)
-                if data:
-                    self.send_message_to_all(current_user, data.decode('utf-8')[:-2])
-                else:
-                    self.change_user_status(current_user, Status.inactive, 'lost connection')
-                    break
-            except concurrent.futures.TimeoutError:
-                self.change_user_status(current_user, Status.inactive, 'lost connection by timeout')
-                break
-        writer.close()
+    def login(self, user):
+        Transport.send_message(user.writer, 'Login: ')
+        login = yield from Transport.read_message(user.reader)
+        Transport.send_message(user.writer, 'Pwd: ')
+        password = yield from Transport.read_message(user.reader)
+        user.name = login[:-2].decode('utf-8')
+        user.password = password
+        if self.enter_to_chat(user):
+            yield from self.transport.add_new_connection(user)
 
     def enter_to_chat(self, new_user):
-        if new_user not in self.users:
-            ChatServer.send_message(new_user.connection, 'Welcome to chat!')
-            self.users.append(new_user)
+        if not self.users.get(new_user.name):
+            Transport.send_message(new_user.writer, 'Welcome to chat!')
+            self.users[new_user.name] = new_user
             print(new_user.name + ' connected')
-
         else:
-            if not self.check_user_existence(new_user):
-                ChatServer.send_message(new_user.connection, 'Incorrect password')
-                new_user.connection.close()
+            if self.users.get(new_user.name).password != new_user.password:
+                Transport.send_message(new_user.writer, 'Incorrect password')
+                new_user.writer.close()
                 return False
 
-            if not self.check_user_inactivity(new_user):
-                ChatServer.send_message(new_user.connection, 'User %s is online now' % new_user.name)
-                new_user.connection.close()
+            if self.users.get(new_user.name).status == Status.active:
+                Transport.send_message(new_user.writer, 'User %s is online now' % new_user.name)
+                new_user.writer.close()
                 return False
 
-            self.change_user_status(new_user, Status.active, 'User %s is online again' % new_user.name)
+            self.users[new_user.name].status = Status.active
+            print('User %s is online again' % new_user.name)
         return True
 
+    def send_message_to_all(self, initiator_user, message):
+        for user_name, user in self.users.items():
+            print(user_name)
+            if user_name != initiator_user.name:
+                Transport.send_message(user.writer, initiator_user.name + ': ' + message)
 
-class ChatServer():
+
+class Transport:
+    def __init__(self, user_handler):
+        self.user_handler = user_handler
+
+    @classmethod
+    def send_message(cls, writer, message):
+        writer.write(str.encode(message + '\r\n'))
+
+    @classmethod
+    def read_message(cls, reader):
+        return reader.readline()
+
+    def add_new_connection(self, user):
+        while True:
+            try:
+                data = yield from asyncio.wait_for(self.read_message(user.reader), timeout=120)
+                if data:
+                    print(self.user_handler.users)
+                    self.user_handler.send_message_to_all(user, data.decode('utf-8')[:-2])
+                else:
+                    user.status = Status.inactive
+                    print(user.name + ' lost connection')
+                    break
+            except concurrent.futures.TimeoutError:
+                user.status = Status.inactive
+                print(user.name + ' lost connection by timeout')
+                break
+        user.writer.close()
+
+
+class ChatServer:
     def __init__(self):
         loop = asyncio.get_event_loop()
-        handler = Handler()
+        handler = UserHandler()
         server_gen = asyncio.start_server(handler, port=8001)
         print('Server started at port 8001')
         server = loop.run_until_complete(server_gen)
@@ -108,14 +114,6 @@ class ChatServer():
         finally:
             server.close()
             loop.close()
-
-    @classmethod
-    def send_message(cls, writer, message):
-        writer.write(str.encode(message + '\r\n'))
-
-    @classmethod
-    def read_message(cls, reader):
-        return reader.readline()
 
 
 if __name__ == '__main__':
