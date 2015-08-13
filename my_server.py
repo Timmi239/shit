@@ -38,7 +38,7 @@ class UserHandler:
         login = yield from Transport.read_message(user.reader)
         Transport.send_message(user.writer, 'Pwd: ')
         password = yield from Transport.read_message(user.reader)
-        user.name = login[:-2].decode('utf-8')
+        user.name = login.strip().decode('utf-8')
         user.password = password
         if self.enter_to_chat(user):
             yield from self.transport.add_new_connection(user)
@@ -65,7 +65,6 @@ class UserHandler:
 
     def send_message_to_all(self, initiator_user, message):
         for user_name, user in self.users.items():
-            print(user_name)
             if user_name != initiator_user.name:
                 Transport.send_message(user.writer, initiator_user.name + ': ' + message)
 
@@ -87,7 +86,6 @@ class Transport:
             try:
                 data = yield from asyncio.wait_for(self.read_message(user.reader), timeout=120)
                 if data:
-                    print(self.user_handler.users)
                     self.user_handler.send_message_to_all(user, data.decode('utf-8')[:-2])
                 else:
                     user.status = Status.inactive
@@ -100,21 +98,20 @@ class Transport:
         user.writer.close()
 
 
-class ChatServer:
-    def __init__(self):
-        loop = asyncio.get_event_loop()
-        handler = UserHandler()
-        server_gen = asyncio.start_server(handler, port=8001)
-        print('Server started at port 8001')
-        server = loop.run_until_complete(server_gen)
-        try:
-            loop.run_forever()
-        except KeyboardInterrupt:
-            print('\nServer stopped')
-        finally:
-            server.close()
-            loop.close()
+def main():
+    loop = asyncio.get_event_loop()
+    handler = UserHandler()
+    server_gen = asyncio.start_server(handler, port=8001)
+    print('Server started at port 8001')
+    server = loop.run_until_complete(server_gen)
+    try:
+        loop.run_forever()
+    except KeyboardInterrupt:
+        print('\nServer stopped')
+    finally:
+        server.close()
+        loop.close()
 
 
 if __name__ == '__main__':
-    ChatServer()
+    main()
