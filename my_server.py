@@ -10,18 +10,20 @@ class Status(Enum):
 
 
 class User:
-    def __init__(self, writer, reader, status=Status.active):
+    def __init__(self, status=Status.active):
         self.status = status
-        self.writer = writer
-        self.reader = reader
 
     def __eq__(self, other_user):
         if self.name == other_user.name:
             return True
         return False
 
-    def change_status(self, status):
-        self.status = status
+
+class Connect:
+    def __init__(self, writer, reader):
+        self.writer = writer
+        self.reader = reader
+        self.user = User()
 
 
 class DataBase:
@@ -46,56 +48,56 @@ class DataBase:
 
     def create_user(self, user):
         db = shelve.open(self.path_to_db)
-        db[user.name] = {'user_password': user.password}
+        db[user.name] = user.password
         db.close()
 
 
 class UserHandler:
     def __init__(self):
         self.db = DataBase()
-        self.users = {}
+        self.connections = {}
         self.transport = Transport(self)
 
     @asyncio.coroutine
     def __call__(self, reader, writer):
-        user = User(writer, reader)
-        yield from self.login(user)
+        connect = Connect(writer, reader)
+        yield from self.login(connect)
 
-    def login(self, user):
-        Transport.send_message(user.writer, 'Login: ')
-        login = yield from Transport.read_message(user.reader)
-        Transport.send_message(user.writer, 'Pwd: ')
-        password = yield from Transport.read_message(user.reader)
-        user.name = login.strip().decode('utf-8')
-        user.password = password
-        if self.enter_to_chat(user):
-            yield from self.transport.add_new_connection(user)
+    def login(self, connect):
+        Transport.send_message(connect.writer, 'Login: ')
+        login = yield from Transport.read_message(connect.reader)
+        Transport.send_message(connect.writer, 'Pwd: ')
+        password = yield from Transport.read_message(connect.reader)
+        connect.user.name = login.strip().decode('utf-8')
+        connect.user.password = password
+        if self.enter_to_chat(connect):
+            yield from self.transport.add_new_connection(connect)
 
-    def enter_to_chat(self, new_user):
-        if not self.db.is_user_exist(new_user.name):
-            Transport.send_message(new_user.writer, 'Welcome to chat!')
-            self.users[new_user.name] = new_user
-            self.db.create_user(new_user)
-            print(new_user.name + ' connected')
+    def enter_to_chat(self, new_connect):
+        if not self.db.is_user_exist(new_connect.user.name):
+            Transport.send_message(new_connect.writer, 'Welcome to chat!')
+            self.connections[new_connect.user.name] = new_connect
+            self.db.create_user(new_connect.user)
+            print(new_connect.user.name + ' connected')
         else:
-            if self.db.is_password_correct(new_user):
-                Transport.send_message(new_user.writer, 'Incorrect password')
-                new_user.writer.close()
+            if not self.db.is_password_correct(new_connect.user):
+                Transport.send_message(new_connect.writer, 'Incorrect password')
+                new_connect.writer.close()
                 return False
 
-            if self.users.get(new_user.name) and self.users.get(new_user.name).status == Status.active:
-                Transport.send_message(new_user.writer, 'User %s is online now' % new_user.name)
-                new_user.writer.close()
+            if self.connections.get(new_connect.user.name) and self.connections.get(new_connect.user.name).status == Status.active:
+                Transport.send_message(new_connect.writer, 'User %s is online now' % new_connect.user.name)
+                new_connect.writer.close()
                 return False
 
-            self.users[new_user.name] = new_user
-            print('User %s is online again' % new_user.name)
+            self.connections[new_connect.user.name] = new_connect
+            print('User %s is online again' % new_connect.user.name)
         return True
 
-    def send_message_to_all(self, initiator_user, message):
-        for user_name, user in self.users.items():
-            if user_name != initiator_user.name and user.status == Status.active:
-                Transport.send_message(user.writer, initiator_user.name + ': ' + message)
+    def send_message_to_all(self, initiator_connect, message):
+        for user_name, connection in self.connections.items():
+            if user_name != initiator_connect.user.name and connection.user.status == Status.active:
+                Transport.send_message(connection.writer, initiator_connect.user.name + ': ' + message)
 
 
 class Transport:
@@ -110,21 +112,21 @@ class Transport:
     def read_message(cls, reader):
         return reader.readline()
 
-    def add_new_connection(self, user):
+    def add_new_connection(self, connect):
         while True:
             try:
-                data = yield from asyncio.wait_for(self.read_message(user.reader), timeout=120)
+                data = yield from asyncio.wait_for(self.read_message(connect.reader), timeout=120)
                 if data:
-                    self.user_handler.send_message_to_all(user, data.decode('utf-8')[:-2])
+                    self.user_handler.send_message_to_all(connect, data.decode('utf-8')[:-2])
                 else:
-                    user.status = Status.inactive
-                    print(user.name + ' lost connection')
+                    connect.user.status = Status.inactive
+                    print(connect.user.name + ' lost connection')
                     break
             except concurrent.futures.TimeoutError:
-                user.status = Status.inactive
-                print(user.name + ' lost connection by timeout')
+                connect.user.status = Status.inactive
+                print(connect.user.name + ' lost connection by timeout')
                 break
-        user.writer.close()
+        connect.writer.close()
 
 
 def main():
