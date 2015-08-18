@@ -1,5 +1,6 @@
 import asyncio
 import concurrent.futures
+import shelve
 from enum import Enum
 
 
@@ -23,8 +24,35 @@ class User:
         self.status = status
 
 
+class DataBase:
+    def __init__(self):
+        self.path_to_db = 'users_db'
+
+    def is_user_exist(self, name):
+        db = shelve.open(self.path_to_db)
+        result = False
+        if db.get(name):
+            result = True
+        db.close()
+        return result
+
+    def is_password_correct(self, user):
+        db = shelve.open(self.path_to_db)
+        result = False
+        if db[user.name] == user.password:
+            result = True
+        db.close()
+        return result
+
+    def create_user(self, user):
+        db = shelve.open(self.path_to_db)
+        db[user.name] = {'user_password': user.password}
+        db.close()
+
+
 class UserHandler:
     def __init__(self):
+        self.db = DataBase()
         self.users = {}
         self.transport = Transport(self)
 
@@ -44,28 +72,29 @@ class UserHandler:
             yield from self.transport.add_new_connection(user)
 
     def enter_to_chat(self, new_user):
-        if not self.users.get(new_user.name):
+        if not self.db.is_user_exist(new_user.name):
             Transport.send_message(new_user.writer, 'Welcome to chat!')
             self.users[new_user.name] = new_user
+            self.db.create_user(new_user)
             print(new_user.name + ' connected')
         else:
-            if self.users.get(new_user.name).password != new_user.password:
+            if self.db.is_password_correct(new_user):
                 Transport.send_message(new_user.writer, 'Incorrect password')
                 new_user.writer.close()
                 return False
 
-            if self.users.get(new_user.name).status == Status.active:
+            if self.users.get(new_user.name) and self.users.get(new_user.name).status == Status.active:
                 Transport.send_message(new_user.writer, 'User %s is online now' % new_user.name)
                 new_user.writer.close()
                 return False
 
-            self.users[new_user.name].status = Status.active
+            self.users[new_user.name] = new_user
             print('User %s is online again' % new_user.name)
         return True
 
     def send_message_to_all(self, initiator_user, message):
         for user_name, user in self.users.items():
-            if user_name != initiator_user.name:
+            if user_name != initiator_user.name and user.status == Status.active:
                 Transport.send_message(user.writer, initiator_user.name + ': ' + message)
 
 
