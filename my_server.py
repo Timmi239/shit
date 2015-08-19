@@ -30,6 +30,7 @@ class DataBase:
     def __init__(self):
         self.path_to_db = 'users_db'
 
+    @asyncio.coroutine
     def is_user_exist(self, name):
         db = shelve.open(self.path_to_db)
         result = False
@@ -38,6 +39,7 @@ class DataBase:
         db.close()
         return result
 
+    @asyncio.coroutine
     def is_password_correct(self, user):
         db = shelve.open(self.path_to_db)
         result = False
@@ -70,17 +72,19 @@ class UserHandler:
         password = yield from Transport.read_message(connect.reader)
         connect.user.name = login.strip().decode('utf-8')
         connect.user.password = password
-        if self.enter_to_chat(connect):
+        if (yield from self.enter_to_chat(connect)):
             yield from self.transport.add_new_connection(connect)
 
     def enter_to_chat(self, new_connect):
-        if not self.db.is_user_exist(new_connect.user.name):
+        res = yield from self.db.is_user_exist(new_connect.user.name)
+        if not res:
             Transport.send_message(new_connect.writer, 'Welcome to chat!')
             self.connections[new_connect.user.name] = new_connect
             self.db.create_user(new_connect.user)
             print(new_connect.user.name + ' connected')
         else:
-            if not self.db.is_password_correct(new_connect.user):
+            res = yield from self.db.is_password_correct(new_connect.user)
+            if not res:
                 Transport.send_message(new_connect.writer, 'Incorrect password')
                 new_connect.writer.close()
                 return False
@@ -117,7 +121,7 @@ class Transport:
             try:
                 data = yield from asyncio.wait_for(self.read_message(connect.reader), timeout=120)
                 if data:
-                    self.user_handler.send_message_to_all(connect, data.decode('utf-8')[:-2])
+                    self.user_handler.send_message_to_all(connect, data.strip().decode('utf-8'))
                 else:
                     connect.user.status = Status.inactive
                     print(connect.user.name + ' lost connection')
