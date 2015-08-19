@@ -13,9 +13,6 @@ class User:
     def __init__(self, status=Status.active):
         self.status = status
 
-    def __eq__(self, other_user):
-        return self.name == other_user.name
-
     def is_password_correct(self, password):
         return self.password == password
 
@@ -32,8 +29,12 @@ class DataBase:
         self.db = shelve.open('users_db')
 
     @asyncio.coroutine
-    def find_user_or_none(self, name):
-        return self.db.get(name)
+    def is_name_exists(self, name):
+        return name in self.db
+
+    @asyncio.coroutine
+    def get_password(self, name):
+        return self.db[name]
 
     @asyncio.coroutine
     def create_user(self, user):
@@ -58,30 +59,28 @@ class UserHandler:
         password = yield from Transport.read_message(connect.reader)
         connect.user.name = login.strip().decode('utf-8')
         connect.user.password = password
-        if (yield from self.enter_to_chat(connect)):
+        if (yield from self.enter_to_chat_successfully(connect)):
             yield from self.transport.add_new_connection(connect)
 
-    def enter_to_chat(self, new_connect):
-        res = yield from self.db.find_user_or_none(new_connect.user.name)
-        if not res:
-            Transport.send_message(new_connect.writer, 'Welcome to chat!')
-            self.connections[new_connect.user.name] = new_connect
-            yield from self.db.create_user(new_connect.user)
-            print(new_connect.user.name + ' connected')
+    def enter_to_chat_successfully(self, connect):
+        if not (yield from self.db.is_name_exists(connect.user.name)):
+            Transport.send_message(connect.writer, 'Welcome to chat!')
+            self.connections[connect.user.name] = connect
+            yield from self.db.create_user(connect.user)
+            print(connect.user.name + ' connected')
         else:
-            res = new_connect.user.is_password_correct(new_connect.user.password)
-            if not res:
-                Transport.send_message(new_connect.writer, 'Incorrect password')
-                new_connect.writer.close()
+            pwd = yield from self.db.get_password(connect.user.name)
+            if not connect.user.is_password_correct(pwd):
+                Transport.send_message(connect.writer, 'Incorrect password')
+                connect.writer.close()
+                return False
+            if self.connections.get(connect.user.name) and self.connections[connect.user.name].user.status == Status.active:
+                Transport.send_message(connect.writer, 'User %s is online now' % connect.user.name)
+                connect.writer.close()
                 return False
 
-            if self.connections.get(new_connect.user.name) and self.connections.get(new_connect.user.name).status == Status.active:
-                Transport.send_message(new_connect.writer, 'User %s is online now' % new_connect.user.name)
-                new_connect.writer.close()
-                return False
-
-            self.connections[new_connect.user.name] = new_connect
-            print('User %s is online again' % new_connect.user.name)
+            self.connections[connect.user.name] = connect
+            print('User %s is online again' % connect.user.name)
         return True
 
     def send_message_to_all(self, initiator_connect, message):
