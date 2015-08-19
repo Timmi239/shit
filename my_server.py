@@ -14,9 +14,10 @@ class User:
         self.status = status
 
     def __eq__(self, other_user):
-        if self.name == other_user.name:
-            return True
-        return False
+        return self.name == other_user.name
+
+    def is_password_correct(self, password):
+        return self.password == password
 
 
 class Connect:
@@ -28,31 +29,15 @@ class Connect:
 
 class DataBase:
     def __init__(self):
-        self.path_to_db = 'users_db'
+        self.db = shelve.open('users_db')
 
     @asyncio.coroutine
-    def is_user_exist(self, name):
-        db = shelve.open(self.path_to_db)
-        result = False
-        if db.get(name):
-            result = True
-        db.close()
-        return result
-
-    @asyncio.coroutine
-    def is_password_correct(self, user):
-        db = shelve.open(self.path_to_db)
-        result = False
-        if db[user.name] == user.password:
-            result = True
-        db.close()
-        return result
+    def find_user_or_none(self, name):
+        return self.db.get(name)
 
     @asyncio.coroutine
     def create_user(self, user):
-        db = shelve.open(self.path_to_db)
-        db[user.name] = user.password
-        db.close()
+        self.db[user.name] = user.password
 
 
 class UserHandler:
@@ -77,14 +62,14 @@ class UserHandler:
             yield from self.transport.add_new_connection(connect)
 
     def enter_to_chat(self, new_connect):
-        res = yield from self.db.is_user_exist(new_connect.user.name)
+        res = yield from self.db.find_user_or_none(new_connect.user.name)
         if not res:
             Transport.send_message(new_connect.writer, 'Welcome to chat!')
             self.connections[new_connect.user.name] = new_connect
             yield from self.db.create_user(new_connect.user)
             print(new_connect.user.name + ' connected')
         else:
-            res = yield from self.db.is_password_correct(new_connect.user)
+            res = new_connect.user.is_password_correct(new_connect.user.password)
             if not res:
                 Transport.send_message(new_connect.writer, 'Incorrect password')
                 new_connect.writer.close()
@@ -145,6 +130,7 @@ def main():
     except KeyboardInterrupt:
         print('\nServer stopped')
     finally:
+        handler.db.db.close()
         server.close()
         loop.close()
 
