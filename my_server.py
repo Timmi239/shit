@@ -48,6 +48,7 @@ class DataBase:
         db.close()
         return result
 
+    @asyncio.coroutine
     def create_user(self, user):
         db = shelve.open(self.path_to_db)
         db[user.name] = user.password
@@ -80,7 +81,7 @@ class UserHandler:
         if not res:
             Transport.send_message(new_connect.writer, 'Welcome to chat!')
             self.connections[new_connect.user.name] = new_connect
-            self.db.create_user(new_connect.user)
+            yield from self.db.create_user(new_connect.user)
             print(new_connect.user.name + ' connected')
         else:
             res = yield from self.db.is_password_correct(new_connect.user)
