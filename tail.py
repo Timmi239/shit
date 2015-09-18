@@ -3,6 +3,8 @@ import time
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileModifiedEvent
 import argparse
+from collections import deque
+import os
 
 
 class MyHandler(FileSystemEventHandler):
@@ -12,7 +14,10 @@ class MyHandler(FileSystemEventHandler):
 
 
 def main():
-    parse_args()
+    args = parse_args().__dict__
+    print get_last_strings(args['lines'], args['filename'])
+    print get_last_strings2(args['lines'], args['filename'])
+
 
 
 def parse_args():
@@ -21,6 +26,16 @@ def parse_args():
     parser.add_argument("-n", "--lines", dest="lines", type=int)
     parser.add_argument('filename', type=str)
     return parser.parse_args()
+
+
+def get_last_strings(count, filename):
+    return "".join([str(i) for i in deque(open(filename), count)])
+
+
+def get_last_strings2(count, filename):
+    f = open(filename, 'r')
+    f.seek(-count, os.SEEK_END)
+    return f.read()
 
 if __name__ == "__main__":
     main()
