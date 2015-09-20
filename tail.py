@@ -33,9 +33,22 @@ def get_last_strings(count, filename):
 
 
 def get_last_strings2(count, filename):
+    BYTE_OFFSET = 32
     f = open(filename, 'r')
-    f.seek(-count, os.SEEK_END)
-    return f.read()
+    current_offset = BYTE_OFFSET
+    f.seek(-current_offset, os.SEEK_END)
+    read_lines = f.readlines()
+    while True:
+        if len(read_lines) < count + 1:
+            current_offset += BYTE_OFFSET
+        elif len(read_lines) > count + 1:
+            BYTE_OFFSET = BYTE_OFFSET//2
+            current_offset -= BYTE_OFFSET
+        else:
+            return read_lines[1:]
+        f.seek(-current_offset, os.SEEK_END)
+        read_lines = f.readlines()
+
 
 if __name__ == "__main__":
     main()
