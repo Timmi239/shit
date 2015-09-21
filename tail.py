@@ -15,9 +15,21 @@ class MyHandler(FileSystemEventHandler):
 
 def main():
     args = parse_args().__dict__
-    print get_last_strings(args['lines'], args['filename'])
-    print get_last_strings2(args['lines'], args['filename'])
-
+    if args['lines']:
+        print get_last_strings(args['lines'], args['filename'])
+        print get_last_strings2(args['lines'], args['filename'])
+    # elif args['use_descriptor']:
+    #     event_handler = MyHandler()
+    #     observer = Observer()
+    #     observer.schedule(event_handler, path='.', recursive=False)
+    #     observer.start()
+    #
+    #     try:
+    #         while True:
+    #             time.sleep(5)
+    #     except KeyboardInterrupt:
+    #         observer.stop()
+    #     observer.join()
 
 
 def parse_args():
@@ -41,25 +53,11 @@ def get_last_strings2(count, filename):
     while True:
         if len(read_lines) < count + 1:
             current_offset += BYTE_OFFSET
-        elif len(read_lines) > count + 1:
-            BYTE_OFFSET = BYTE_OFFSET//2
-            current_offset -= BYTE_OFFSET
         else:
-            return read_lines[1:]
+            return "".join(read_lines[-count:])
         f.seek(-current_offset, os.SEEK_END)
         read_lines = f.readlines()
 
 
 if __name__ == "__main__":
     main()
-    # event_handler = MyHandler()
-    # observer = Observer()
-    # observer.schedule(event_handler, path='.', recursive=False)
-    # observer.start()
-    #
-    # try:
-    #     while True:
-    #         time.sleep(5)
-    # except KeyboardInterrupt:
-    #     observer.stop()
-    # observer.join()
