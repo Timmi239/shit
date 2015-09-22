@@ -53,15 +53,14 @@ def get_last_strings_offset_file(count, filename):
     f = open(filename, 'rb')
     current_offset = BYTE_OFFSET
     f.seek(-current_offset, os.SEEK_END)
-    read_lines = f.readlines()
     while True:
+        read_lines = f.readlines()
         if len(read_lines) < count + 1:
             current_offset += BYTE_OFFSET
         else:
             f.close()
             return "".join(read_lines[-count:])
         f.seek(-current_offset, os.SEEK_END)
-        read_lines = f.readlines()
 
 
 if __name__ == "__main__":
