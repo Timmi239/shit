@@ -7,6 +7,9 @@ from collections import deque
 import os
 
 
+BYTE_OFFSET = 32
+
+
 class MyHandler(FileSystemEventHandler):
     def on_modified(self, event):
         if type(event) == FileModifiedEvent and not str(event.src_path).endswith('___jb_bak___'):
@@ -16,8 +19,8 @@ class MyHandler(FileSystemEventHandler):
 def main():
     args = parse_args().__dict__
     if args['lines']:
-        print get_last_strings(args['lines'], args['filename'])
-        print get_last_strings2(args['lines'], args['filename'])
+        print get_last_strings_deque(args['lines'], args['filename'])
+        print get_last_strings_offset_file(args['lines'], args['filename'])
     # elif args['use_descriptor']:
     #     event_handler = MyHandler()
     #     observer = Observer()
@@ -40,13 +43,14 @@ def parse_args():
     return parser.parse_args()
 
 
-def get_last_strings(count, filename):
-    return "".join([str(i) for i in deque(open(filename), count)])
+def get_last_strings_deque(count, filename):
+    with open(filename, 'rb') as f:
+        last_strings = deque(f, count)
+    return "".join(i for i in last_strings)
 
 
-def get_last_strings2(count, filename):
-    BYTE_OFFSET = 32
-    f = open(filename, 'r')
+def get_last_strings_offset_file(count, filename):
+    f = open(filename, 'rb')
     current_offset = BYTE_OFFSET
     f.seek(-current_offset, os.SEEK_END)
     read_lines = f.readlines()
@@ -54,6 +58,7 @@ def get_last_strings2(count, filename):
         if len(read_lines) < count + 1:
             current_offset += BYTE_OFFSET
         else:
+            f.close()
             return "".join(read_lines[-count:])
         f.seek(-current_offset, os.SEEK_END)
         read_lines = f.readlines()
