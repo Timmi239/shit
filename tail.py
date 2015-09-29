@@ -11,28 +11,34 @@ BYTE_OFFSET = 32
 
 
 class MyHandler(FileSystemEventHandler):
+    def __init__(self, file_path):
+        self.file = open(file_path, 'rb')
+        self.file.seek(0, os.SEEK_END)
+        super(MyHandler, self).__init__()
+
     def on_modified(self, event):
         if type(event) == FileModifiedEvent and not str(event.src_path).endswith('___jb_bak___'):
-            print "Got it!"
+            print "".join(self.file.readlines())
 
 
 def main():
     args = parse_args().__dict__
     if args['lines']:
-        print get_last_strings_deque(args['lines'], args['filename'])
         print get_last_strings_offset_file(args['lines'], args['filename'])
-    # elif args['use_descriptor']:
-    #     event_handler = MyHandler()
-    #     observer = Observer()
-    #     observer.schedule(event_handler, path='.', recursive=False)
-    #     observer.start()
-    #
-    #     try:
-    #         while True:
-    #             time.sleep(5)
-    #     except KeyboardInterrupt:
-    #         observer.stop()
-    #     observer.join()
+    if args['use_descriptor']:
+        path = os.path.dirname(os.path.realpath(__file__))
+        file_path = os.path.join(path, args['filename'])
+        event_handler = MyHandler(file_path)
+        observer = Observer()
+        observer.schedule(event_handler, path=os.path.dirname(path), recursive=False)
+        observer.start()
+
+        try:
+            while True:
+                time.sleep(5)
+        except KeyboardInterrupt:
+            observer.stop()
+        observer.join()
 
 
 def parse_args():
